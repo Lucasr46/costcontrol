@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cost Control</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./cost-control-v2.css" />
+  </head>
+  <body>
+    <div class="screen-state" id="app-loading">
+      <div class="screen-state__card">
+        <div class="brand brand--center">
+          <div class="brand__mark">CC</div>
+          <div>
+            <p class="eyebrow">Personal Finance</p>
+            <h1>Cost Control</h1>
+          </div>
+        </div>
+        <p id="loading-message">Preparando o ambiente do Cost Control...</p>
+      </div>
+    </div>
+
+    <div class="screen-state" id="auth-shell" hidden>
+      <div class="screen-state__card auth-card">
+        <div class="brand brand--center">
+          <div class="brand__mark">CC</div>
+          <div>
+            <p class="eyebrow">Cost Control</p>
+            <h1>Acesse sua conta</h1>
+          </div>
+        </div>
+
+        <p class="auth-card__text">
+          Entre com seu e-mail para receber um link mágico e acessar seus lançamentos em qualquer dispositivo.
+        </p>
+
+        <form id="auth-form" class="form">
+          <label class="field">
+            <span>E-mail</span>
+            <input id="auth-email" type="email" placeholder="voce@exemplo.com" required />
+          </label>
+          <button class="button button--primary" id="auth-submit-button" type="submit">Enviar link de acesso</button>
+        </form>
+
+        <div class="auth-card__actions">
+          <button class="button button--ghost" id="demo-mode-button" type="button">Usar modo demonstração local</button>
+        </div>
+
+        <div class="setup-note" id="setup-note" hidden>
+          <p class="eyebrow">Configuração pendente</p>
+          <strong>Falta conectar o Supabase.</strong>
+          <span>
+            Preencha o arquivo <code>cost-control.config.js</code> com a URL e a chave pública do projeto para ativar login e sincronização.
+          </span>
+        </div>
+
+        <div class="auth-feedback" id="auth-feedback" hidden></div>
+      </div>
+    </div>
+
+    <div class="app-shell" id="app-shell" hidden>
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand__mark">CC</div>
+          <div>
+            <p class="eyebrow">Personal Finance</p>
+            <h1>Cost Control</h1>
+          </div>
+        </div>
+
+        <section class="session-panel">
+          <p class="eyebrow">Conta</p>
+          <strong id="user-email">Sem sessão</strong>
+          <span id="sync-status">Aguardando autenticação.</span>
+          <button class="button button--ghost button--sm" id="sign-out-button" type="button" hidden>Sair</button>
+        </section>
+
+        <nav class="nav">
+          <button class="nav__item nav__item--active" data-view="dashboard">Dashboard</button>
+          <button class="nav__item" data-view="planning">Planejamento</button>
+          <button class="nav__item" data-view="launches">Lançamentos</button>
+          <button class="nav__item" data-view="categories">Categorias</button>
+          <button class="nav__item" data-view="reports">Relatórios</button>
+          <button class="nav__item" data-view="history">Histórico</button>
+        </nav>
+
+        <section class="sidebar-panel">
+          <p class="eyebrow">Resumo rápido</p>
+          <strong id="sidebar-title">Carregando...</strong>
+          <span id="sidebar-text">Processando leitura do orçamento mensal.</span>
+        </section>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="view-eyebrow">Visão geral financeira</p>
+            <h2 id="view-title">Dashboard</h2>
+          </div>
+          <div class="topbar__actions">
+            <div class="field period-filter-field">
+              <span>Período</span>
+              <div class="period-filter">
+                <div class="year-picker">
+                  <button class="year-picker__button" id="period-year-button" type="button" aria-haspopup="true" aria-expanded="false"></button>
+                  <div class="year-picker__menu" id="period-year-menu" hidden></div>
+                </div>
+                <div class="month-strip" id="month-strip"></div>
+              </div>
+            </div>
+            <button class="button button--primary button--iconic" id="go-launches" type="button">
+              <span class="button__icon" aria-hidden="true">+</span>
+              <span>Novo lançamento</span>
+            </button>
+          </div>
+        </header>
+
+        <section class="view view--active" data-panel="dashboard">
+          <section class="grid grid--3" id="stats-grid"></section>
+          <section class="grid grid--3" id="budget-grid"></section>
+
+          <section class="grid grid--2">
+            <article class="card card--category-breakdown">
+              <div class="card__header">
+                <div>
+                  <p class="eyebrow">Categorias</p>
+                  <h3>Despesas por categoria</h3>
+                </div>
+              </div>
+              <div id="category-bars" class="stack"></div>
+              <div id="category-hover-card" class="category-hover-card" hidden></div>
+            </article>
+
+            <article class="card card--trend-panel">
+              <div class="card__header">
+                <div>
+                  <p class="eyebrow">Comparativo</p>
+                  <h3 id="trend-title">Evolução mensal</h3>
+                </div>
+                <button class="button button--ghost button--sm" id="trend-clear-filter" type="button" hidden>Limpar filtro</button>
+              </div>
+              <div id="trend-columns" class="trend"></div>
+            </article>
+          </section>
+
+          <section class="grid">
+            <article class="card">
+              <div class="card__header">
+                <div>
+                  <p class="eyebrow">Insights</p>
+                  <h3>Leituras do mês</h3>
+                </div>
+              </div>
+              <ul class="alert-list" id="alert-list"></ul>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-panel="planning">
+          <section class="grid grid--2-strong">
+            <article class="card">
+              <div class="card__header">
+                <div>
+                  <p class="eyebrow">Configuração</p>
+                  <h3 id="planning-title">Planejamento do mês</h3>
+                </div>
+              </div>
+              <form id="planning-form" class="form">
+                <label class="field">
+                  <span>Renda mensal</span>
+                  <input id="planning-income" type="number" min="0" step="0.01" />
+                </label>
+                <div class="grid grid--2">
+                  <label class="field">
+                    <span>Custo fixo (%)</span>
+                    <input id="planning-fixed" type="number" min="0" max="100" />
+                  </label>
+                  <label class="field">
+                    <span>Custo variável (%)</span>
+                    <input id="planning-variable" type="number" min="0" max="100" />
+                  </label>
+                </div>
+                <label class="field">
+                  <span>Investimento (%)</span>
+                  <input id="planning-investment" type="number" min="0" max="100" />
+                </label>
+                <button class="button button--primary" type="submit">Salvar planejamento</button>
+              </form>
+            </article>
+
+            <article class="card">
+              <div class="card__header">
+                <div>
+                  <p class="eyebrow">Resumo</p>
+                  <h3>Distribuição do orçamento</h3>
+                </div>
+              </div>
+              <div class="stack" id="planning-summary"></div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-panel="launches">
+          <section class="grid grid--2-strong">
+            <article class="card">
+              <div class="card__header">
+                <div>
+                  <p class="eyebrow">Novo lançamento</p>
+                  <h3>Receitas, despesas e investimentos</h3>
+                </div>
+              </div>
+              <form id="transaction-form" class="form">
+                <div class="grid grid--2">
+                  <label class="field">
+                    <span>Tipo</span>
+                    <select id="tx-type">
+                      <option value="income">Receita</option>
+                      <option value="expense" selected>Despesa</option>
+                      <option value="investment">Investimento</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Valor total</span>
+                    <input id="tx-amount" type="number" min="0" step="0.01" required />
+                  </label>
+                </div>
+                <div class="grid grid--2">
+                  <label class="field">
+                    <span>Descrição</span>
+                    <input id="tx-description" type="text" required />
+                  </label>
+                  <label class="field">
+                    <span>Data</span>
+                    <input id="tx-date" type="date" required />
+                  </label>
+                </div>
+                <div class="grid grid--2">
+                  <label class="field">
+                    <span>Categoria</span>
+                    <select id="tx-category"></select>
+                  </label>
+                  <label class="field">
+                    <span>Periodicidade</span>
+                    <select id="tx-periodicity">
+                      <option value="single" selected>Único</option>
+                      <option value="recurring">Recorrente</option>
+                      <option value="installment">Parcelado</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="grid grid--2">
+                  <label class="field">
+                    <span>Parcelas</span>
+                    <input id="tx-installments" type="number" min="1" max="48" value="1" />
+                  </label>
+                  <label class="field">
+                    <span>Recorrência em meses</span>
+                    <input id="tx-recurrence" type="number" min="1" max="24" value="1" />
+                  </label>
+                </div>
+                <div class="form-actions">
+                  <button class="button button--primary" id="tx-submit-button" type="submit">Adicionar lançamento</button>
+                  <button class="button button--ghost" id="tx-cancel-button" type="button" hidden>Cancelar edição</button>
+                </div>
+              </form>
+            </article>
+
+            <article class="card">
+              <div class="card__header">
+                <div>
+                  <p class="eyebrow">Movimentações</p>
+                  <h3>Lançamentos do mês selecionado</h3>
+                </div>
+              </div>
+              <div class="table-head table-head--actions">
+                <span>Descrição</span>
+                <span>Categoria</span>
+                <span>Competência</span>
+                <span>Valor</span>
+                <span>Ações</span>
+              </div>
+              <div id="transactions-table" class="table"></div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-panel="categories">
+          <section class="grid grid--2-strong">
+            <article class="card">
+              <div class="card__header">
+                <div>
+                  <p class="eyebrow">Nova categoria</p>
+                  <h3>Cadastre categorias por tipo</h3>
+                </div>
+              </div>
+              <form id="category-form" class="form">
+                <div class="grid grid--2">
+                  <label class="field">
+                    <span>Categoria</span>
+                    <input id="category-name" type="text" required />
+                  </label>
+                  <label class="field">
+                    <span>Qual tipo essa categoria faz parte?</span>
+                    <select id="category-group">
+                      <option value="income">Receita</option>
+                      <option value="expense">Despesa</option>
+                      <option value="investment">Investimento</option>
+                    </select>
+                  </label>
+                </div>
+                <label class="field" id="category-cost-type-field">
+                  <span>Essa despesa conta como</span>
+                  <select id="category-cost-type">
+                    <option value="fixed">Custo fixo</option>
+                    <option value="variable" selected>Custo variável</option>
+                  </select>
+                </label>
+                <div class="form-actions">
+                  <button class="button button--primary" id="category-submit-button" type="submit">Adicionar categoria</button>
+                  <button class="button button--ghost" id="category-cancel-button" type="button" hidden>Cancelar edição</button>
+                </div>
+              </form>
+            </article>
+
+            <article class="card">
+              <div class="card__header">
+                <div>
+                  <p class="eyebrow">Categorias cadastradas</p>
+                  <h3>Estrutura modular</h3>
+                </div>
+              </div>
+              <div id="category-list" class="stack"></div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-panel="reports">
+          <article class="card">
+            <div class="card__header">
+              <div>
+                <p class="eyebrow">Relatório principal</p>
+                <h3>Resumo por categoria</h3>
+              </div>
+            </div>
+            <div class="filters filters--3">
+              <label class="field">
+                <span>Janela de datas</span>
+                <select id="report-date-range">
+                  <option value="selected_month">Mês selecionado</option>
+                  <option value="last_3_months">Últimos 3 meses</option>
+                  <option value="last_6_months">Últimos 6 meses</option>
+                  <option value="current_year">Ano atual</option>
+                  <option value="all">Todos os períodos</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Tipo</span>
+                <select id="report-type">
+                  <option value="all">Todos</option>
+                  <option value="income">Receita</option>
+                  <option value="expense">Despesa</option>
+                  <option value="investment">Investimento</option>
+                </select>
+              </label>
+              <label class="field report-category-field">
+                <span>Categoria</span>
+                <select id="report-category">
+                  <option value="all">Todas</option>
+                </select>
+              </label>
+            </div>
+            <div id="report-summary-cards" class="grid grid--3"></div>
+            <div class="card card--soft">
+              <div class="card__header">
+                <div>
+                  <p class="eyebrow">Comparação mensal</p>
+                  <h3>Evolução do período filtrado</h3>
+                </div>
+              </div>
+              <div id="report-comparison-list" class="stack"></div>
+            </div>
+            <div class="table-head">
+              <span>Categoria</span>
+              <span>Tipo</span>
+              <span>Participação</span>
+              <span>Total</span>
+            </div>
+            <div id="report-table" class="table"></div>
+          </article>
+        </section>
+
+        <section class="view" data-panel="history">
+          <article class="card">
+            <div class="card__header">
+              <div>
+                <p class="eyebrow">Histórico</p>
+                <h3>Todas as movimentações</h3>
+              </div>
+            </div>
+            <div class="filters filters--3">
+              <label class="field">
+                <span>Janela de datas</span>
+                <select id="history-date-range">
+                  <option value="selected_month">Mês selecionado</option>
+                  <option value="last_3_months">Últimos 3 meses</option>
+                  <option value="last_6_months">Últimos 6 meses</option>
+                  <option value="current_year">Ano atual</option>
+                  <option value="all">Todos os períodos</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Tipo</span>
+                <select id="history-type">
+                  <option value="all">Todos</option>
+                  <option value="income">Receita</option>
+                  <option value="expense">Despesa</option>
+                  <option value="investment">Investimento</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Categoria</span>
+                <select id="history-category">
+                  <option value="all">Todas</option>
+                </select>
+              </label>
+            </div>
+            <div class="table-head table-head--actions">
+              <span>Descrição</span>
+              <span>Tipo</span>
+              <span>Competência</span>
+              <span>Valor</span>
+              <span>Ações</span>
+            </div>
+            <div id="history-table" class="table"></div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./cost-control.config.js"></script>
+    <script src="./cost-control-v2.js"></script>
+  </body>
+</html>
