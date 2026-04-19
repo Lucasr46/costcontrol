@@ -65,6 +65,43 @@ code {
   margin: 18px 0 20px;
 }
 
+.auth-switcher {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 6px;
+  border-radius: 18px;
+  background: #eef4ff;
+}
+
+.auth-switcher__tab {
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-switcher__tab--active {
+  background: #fff;
+  color: var(--text);
+  box-shadow: 0 8px 22px rgba(15, 63, 191, 0.08);
+}
+
+.auth-link {
+  margin-top: 14px;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font-weight: 700;
+  padding: 0;
+  cursor: pointer;
+  justify-self: start;
+}
+
 .auth-card__actions {
   margin-top: 14px;
 }

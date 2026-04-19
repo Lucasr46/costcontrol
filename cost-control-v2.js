@@ -46,6 +46,7 @@ const state = {
   isAuthenticated: false,
   session: null,
   currentUser: null,
+  authMode: "signin",
   syncTone: "idle",
   syncMessage: "Aguardando autenticação.",
   selectedMonth: CURRENT_MONTH,
@@ -1570,10 +1571,114 @@ function bindAuthProduction() {
   });
 }
 
+function renderAuthMode() {
+  const isSignup = state.authMode === "signup";
+  $("#auth-mode-signin").classList.toggle("auth-switcher__tab--active", !isSignup);
+  $("#auth-mode-signup").classList.toggle("auth-switcher__tab--active", isSignup);
+  $("#auth-submit-button").textContent = isSignup ? "Criar conta" : "Entrar";
+  $("#auth-description").textContent = isSignup
+    ? "Crie sua conta com e-mail e senha para sincronizar seus dados entre dispositivos."
+    : "Entre com seu e-mail e senha para acessar seus lançamentos em qualquer dispositivo.";
+}
+
+function bindAuthPasswordMode() {
+  $("#auth-mode-signin").addEventListener("click", () => {
+    state.authMode = "signin";
+    renderAuthMode();
+    $("#auth-feedback").hidden = true;
+  });
+
+  $("#auth-mode-signup").addEventListener("click", () => {
+    state.authMode = "signup";
+    renderAuthMode();
+    $("#auth-feedback").hidden = true;
+  });
+
+  $("#auth-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const email = $("#auth-email").value.trim();
+    const password = $("#auth-password").value;
+    if (!email || !password) return;
+    if (!state.isConfigured || !supabaseClient) {
+      showAuth({ showSetup: true, message: "Configure o Supabase antes de usar o login com senha." });
+      renderAuthMode();
+      return;
+    }
+
+    $("#auth-submit-button").disabled = true;
+    showAuth({ message: state.authMode === "signup" ? "Criando sua conta..." : "Entrando na sua conta..." });
+    renderAuthMode();
+    try {
+      if (state.authMode === "signup") {
+        const { error } = await supabaseClient.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: CONFIG.authRedirectTo || `${window.location.origin}${window.location.pathname}`,
+          },
+        });
+        if (error) throw error;
+        showAuth({ message: "Conta criada. Se o Supabase pedir confirmação por e-mail, conclua pelo link recebido." });
+        renderAuthMode();
+      } else {
+        const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (error) {
+      const normalizedMessage = String(error.message || "").toLowerCase();
+      let message = error.message || "Não foi possível concluir o acesso.";
+      if (normalizedMessage.includes("invalid login credentials")) {
+        message = "E-mail ou senha inválidos. Revise seus dados e tente novamente.";
+      } else if (normalizedMessage.includes("user already registered")) {
+        message = "Esse e-mail já está cadastrado. Use a aba Entrar ou redefina sua senha.";
+      } else if (normalizedMessage.includes("password")) {
+        message = "A senha informada não atende aos critérios exigidos. Tente uma senha mais forte.";
+      } else if (normalizedMessage.includes("email not confirmed")) {
+        message = "Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada.";
+      }
+      showAuth({ message, showSetup: !state.isConfigured });
+      renderAuthMode();
+    } finally {
+      $("#auth-submit-button").disabled = false;
+    }
+  });
+
+  $("#auth-reset-button").addEventListener("click", async () => {
+    const email = $("#auth-email").value.trim();
+    if (!email) {
+      showAuth({ message: "Informe seu e-mail para receber a redefinição de senha." });
+      renderAuthMode();
+      return;
+    }
+    if (!state.isConfigured || !supabaseClient) {
+      showAuth({ showSetup: true, message: "Configure o Supabase antes de usar a recuperação de senha." });
+      renderAuthMode();
+      return;
+    }
+
+    $("#auth-reset-button").disabled = true;
+    try {
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+        redirectTo: CONFIG.authRedirectTo || `${window.location.origin}${window.location.pathname}`,
+      });
+      if (error) throw error;
+      showAuth({ message: "Enviamos um e-mail para redefinir sua senha. Verifique sua caixa de entrada." });
+      renderAuthMode();
+    } catch (error) {
+      showAuth({ message: error.message || "Não foi possível enviar o e-mail de redefinição." });
+      renderAuthMode();
+    } finally {
+      $("#auth-reset-button").disabled = false;
+    }
+  });
+
+  renderAuthMode();
+}
+
 async function bootstrap() {
   bindNav();
   bindPeriodFilter();
-  bindAuthProduction();
+  bindAuthPasswordMode();
   bindForms();
   resetTransactionForm();
   resetCategoryForm();

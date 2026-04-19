@@ -36,17 +36,28 @@
           </div>
         </div>
 
-        <p class="auth-card__text">
-          Entre com seu e-mail para receber um link mágico e acessar seus lançamentos em qualquer dispositivo.
+        <p class="auth-card__text" id="auth-description">
+          Entre com seu e-mail e senha para acessar seus lançamentos em qualquer dispositivo.
         </p>
+
+        <div class="auth-switcher">
+          <button class="auth-switcher__tab auth-switcher__tab--active" id="auth-mode-signin" type="button">Entrar</button>
+          <button class="auth-switcher__tab" id="auth-mode-signup" type="button">Criar conta</button>
+        </div>
 
         <form id="auth-form" class="form">
           <label class="field">
             <span>E-mail</span>
             <input id="auth-email" type="email" placeholder="voce@exemplo.com" required />
           </label>
-          <button class="button button--primary" id="auth-submit-button" type="submit">Enviar link de acesso</button>
+          <label class="field">
+            <span>Senha</span>
+            <input id="auth-password" type="password" placeholder="Digite sua senha" required />
+          </label>
+          <button class="button button--primary" id="auth-submit-button" type="submit">Entrar</button>
         </form>
+
+        <button class="auth-link" id="auth-reset-button" type="button">Esqueci minha senha</button>
 
         <div class="auth-card__actions">
           <button class="button button--ghost" id="demo-mode-button" type="button">Usar modo demonstração local</button>
