@@ -90,6 +90,32 @@ code {
   display: block;
 }
 
+.session-pill {
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.12);
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.session-panel[data-sync-tone="synced"] .session-pill {
+  background: rgba(20, 184, 115, 0.14);
+  color: #0f8b58;
+}
+
+.session-panel[data-sync-tone="saving"] .session-pill,
+.session-panel[data-sync-tone="loading"] .session-pill {
+  background: rgba(31, 94, 255, 0.12);
+  color: var(--primary);
+}
+
+.session-panel[data-sync-tone="error"] .session-pill {
+  background: rgba(211, 81, 68, 0.12);
+  color: var(--danger);
+}
+
 .setup-note span,
 .session-panel span,
 .auth-feedback {
@@ -663,6 +689,12 @@ select {
 
   .month-strip {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .topbar__actions > .button,
+  .auth-card .button {
+    width: 100%;
+    justify-content: center;
   }
 
   .grid--3,

@@ -46,6 +46,8 @@ const state = {
   isAuthenticated: false,
   session: null,
   currentUser: null,
+  syncTone: "idle",
+  syncMessage: "Aguardando autenticação.",
   selectedMonth: CURRENT_MONTH,
   editingTransactionId: null,
   editingCategoryId: null,
@@ -197,6 +199,47 @@ function buildSnapshot() {
 
 function saveLocalCache() {
   window.localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(buildSnapshot()));
+}
+
+function clearAuthUrlState() {
+  const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+  window.history.replaceState({}, document.title, cleanUrl);
+}
+
+function parseAuthFeedbackFromUrl() {
+  const source = `${window.location.hash}${window.location.search}`;
+  if (!source || (!source.includes("error=") && !source.includes("error_code="))) return "";
+
+  const normalized = source
+    .replace(/^#/, "")
+    .replace(/^\?/, "")
+    .replace(/#/g, "&")
+    .replace(/\?/g, "&");
+  const params = new URLSearchParams(normalized);
+  const code = params.get("error_code") || "";
+  const description = decodeURIComponent((params.get("error_description") || "").replace(/\+/g, " "));
+
+  clearAuthUrlState();
+
+  if (code === "otp_expired" || description.toLowerCase().includes("expired")) {
+    return "Seu link de acesso expirou. Solicite um novo e-mail e use apenas o link mais recente.";
+  }
+
+  if (description.toLowerCase().includes("rate limit")) {
+    return "Você fez várias tentativas em sequência. Aguarde alguns minutos antes de pedir um novo link.";
+  }
+
+  if (description) {
+    return description;
+  }
+
+  return "Não foi possível concluir o login com o link enviado. Tente gerar um novo acesso.";
+}
+
+function setSyncState(tone, message) {
+  state.syncTone = tone;
+  state.syncMessage = message;
+  updateSessionPanel();
 }
 
 function hasRemote() {
@@ -1404,10 +1447,133 @@ async function bootAuthenticatedApp(session) {
   renderAll();
 }
 
+function updateSessionPanel() {
+  const email = state.currentUser?.email || (state.serviceMode === "demo" ? "Modo demonstração local" : "Sem sessão");
+  $("#user-email").textContent = email;
+  $("#session-pill").textContent = state.serviceMode === "demo"
+    ? "Local"
+    : state.syncTone === "saving"
+      ? "Sincronizando"
+      : state.syncTone === "synced"
+        ? "Online"
+        : state.syncTone === "error"
+          ? "Atenção"
+          : state.isAuthenticated
+            ? "Conta ativa"
+            : "Offline";
+  $("#sync-status").textContent = state.serviceMode === "demo"
+    ? "Dados somente neste navegador."
+    : state.syncMessage || (state.isAuthenticated ? "Sincronização remota ativa." : "Aguardando autenticação.");
+  $(".session-panel").dataset.syncTone = state.serviceMode === "demo" ? "idle" : state.syncTone;
+  $("#sign-out-button").hidden = !(state.isAuthenticated || state.serviceMode === "demo");
+}
+
+function handleSyncError(error, fallbackMessage) {
+  console.error(error);
+  setSyncState("error", "Não foi possível sincronizar agora. Você pode tentar novamente em instantes.");
+  window.alert(error?.message || fallbackMessage);
+}
+
+async function persistPreferences() {
+  saveLocalCache();
+  if (!hasRemote()) return;
+  setSyncState("saving", "Sincronizando mudanças...");
+  await upsertPreferencesRemote({
+    selected_month: state.selectedMonth,
+    filters: state.filters,
+    dashboard_category_id: state.dashboardCategoryId || null,
+  });
+  setSyncState("synced", "Tudo sincronizado com sua conta.");
+}
+
+async function bootAuthenticatedApp(session) {
+  state.serviceMode = "remote";
+  state.session = session;
+  state.currentUser = session.user;
+  state.isAuthenticated = true;
+  setSyncState("loading", "Carregando seus dados...");
+  showLoading("Carregando seus dados...");
+  await ensureProfile();
+  let remoteState = await fetchRemoteState();
+  await seedDefaultsIfNeeded(remoteState.categories);
+  remoteState = await fetchRemoteState();
+  remoteState = await migrateLegacyLocalStateIfNeeded(remoteState);
+
+  state.selectedMonth = remoteState.preferences?.selected_month || remoteState.transactions[0]?.competence || CURRENT_MONTH;
+  state.dashboardCategoryId = remoteState.preferences?.dashboard_category_id || "";
+  state.filters = remoteState.preferences?.filters || state.filters;
+  state.planning = Object.keys(remoteState.planning).length ? remoteState.planning : structuredClone(EMPTY_PLANNING);
+  state.categories = remoteState.categories.length ? remoteState.categories : structuredClone(DEFAULT_CATEGORIES);
+  state.transactions = remoteState.transactions;
+
+  clearAuthUrlState();
+  showApp();
+  resetTransactionForm();
+  resetCategoryForm();
+  setSyncState("synced", "Tudo sincronizado com sua conta.");
+  renderAll();
+}
+
+function bindAuthProduction() {
+  $("#auth-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const email = $("#auth-email").value.trim();
+    if (!email) return;
+    if (!state.isConfigured || !supabaseClient) {
+      showAuth({ showSetup: true, message: "Configure o Supabase antes de enviar o link mágico." });
+      return;
+    }
+
+    $("#auth-submit-button").disabled = true;
+    showAuth({ message: "Enviando o link de acesso..." });
+    try {
+      const redirectTo = CONFIG.authRedirectTo || `${window.location.origin}${window.location.pathname}`;
+      const { error } = await supabaseClient.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: redirectTo },
+      });
+      if (error) throw error;
+      showAuth({ message: "Link enviado. Abra somente o e-mail mais recente para acessar sua conta." });
+    } catch (error) {
+      const normalizedMessage = String(error.message || "").toLowerCase();
+      const message = normalizedMessage.includes("rate limit")
+        ? "Você tentou várias vezes em sequência. Aguarde um pouco antes de pedir um novo link."
+        : error.message || "Não foi possível enviar o link de acesso.";
+      showAuth({ message, showSetup: !state.isConfigured });
+    } finally {
+      $("#auth-submit-button").disabled = false;
+    }
+  });
+
+  $("#demo-mode-button").addEventListener("click", () => {
+    state.serviceMode = "demo";
+    state.isAuthenticated = false;
+    state.session = null;
+    state.currentUser = null;
+    setSyncState("idle", "Dados somente neste navegador.");
+    applySnapshot(cacheSnapshot() || legacySnapshot(), true);
+    clearAuthUrlState();
+    showApp();
+    resetTransactionForm();
+    resetCategoryForm();
+    renderAll();
+  });
+
+  $("#sign-out-button").addEventListener("click", async () => {
+    if (state.serviceMode === "demo") {
+      clearAuthUrlState();
+      showAuth({ showSetup: !state.isConfigured });
+      return;
+    }
+    if (!supabaseClient) return;
+    await supabaseClient.auth.signOut();
+  });
+}
+
 async function bootstrap() {
   bindNav();
   bindPeriodFilter();
-  bindAuth();
+  bindAuthProduction();
   bindForms();
   resetTransactionForm();
   resetCategoryForm();
@@ -1415,7 +1581,7 @@ async function bootstrap() {
   supabaseClient = createSupabaseClient();
   if (!supabaseClient) {
     state.serviceMode = "remote";
-    showAuth({ showSetup: true });
+    showAuth({ showSetup: true, message: parseAuthFeedbackFromUrl() });
     return;
   }
 
@@ -1427,7 +1593,8 @@ async function bootstrap() {
         state.isAuthenticated = false;
         state.session = null;
         state.currentUser = null;
-        showAuth({ showSetup: false });
+        setSyncState("idle", "Aguardando autenticação.");
+        showAuth({ showSetup: false, message: parseAuthFeedbackFromUrl() });
       }
     });
     authListenerBound = true;
@@ -1444,7 +1611,7 @@ async function bootstrap() {
     return;
   }
 
-  showAuth({ showSetup: false });
+  showAuth({ showSetup: false, message: parseAuthFeedbackFromUrl() });
 }
 
 bootstrap().catch((error) => {
