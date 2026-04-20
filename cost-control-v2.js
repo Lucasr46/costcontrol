@@ -47,6 +47,8 @@ const state = {
   session: null,
   currentUser: null,
   authMode: "signin",
+  authScreen: "login",
+  pendingAuthMessage: "",
   syncTone: "idle",
   syncMessage: "Aguardando autenticação.",
   selectedMonth: CURRENT_MONTH,
@@ -207,6 +209,13 @@ function clearAuthUrlState() {
   window.history.replaceState({}, document.title, cleanUrl);
 }
 
+function authRouteParams() {
+  const hash = window.location.hash.replace(/^#/, "");
+  const search = window.location.search.replace(/^\?/, "");
+  const normalized = [hash, search].filter(Boolean).join("&");
+  return new URLSearchParams(normalized);
+}
+
 function parseAuthFeedbackFromUrl() {
   const source = `${window.location.hash}${window.location.search}`;
   if (!source || (!source.includes("error=") && !source.includes("error_code="))) return "";
@@ -278,6 +287,23 @@ function showAuth(options = {}) {
     feedback.hidden = true;
     feedback.textContent = "";
   }
+}
+
+function enterRecoveryMode(message = "") {
+  state.authScreen = "recovery";
+  $("#auth-email").value = state.currentUser?.email || $("#auth-email").value;
+  $("#auth-recovery-password").value = "";
+  $("#auth-recovery-confirm").value = "";
+  showAuth({ message });
+  renderAuthMode();
+}
+
+function leaveRecoveryMode(message = "") {
+  state.authScreen = "login";
+  $("#auth-recovery-password").value = "";
+  $("#auth-recovery-confirm").value = "";
+  showAuth({ message });
+  renderAuthMode();
 }
 
 function showApp() {
@@ -1576,22 +1602,47 @@ function renderAuthMode() {
   $("#auth-mode-signin").classList.toggle("auth-switcher__tab--active", !isSignup);
   $("#auth-mode-signup").classList.toggle("auth-switcher__tab--active", isSignup);
   $("#auth-submit-button").textContent = isSignup ? "Criar conta" : "Entrar";
-  $("#auth-description").textContent = isSignup
+  const isRecovery = state.authScreen === "recovery";
+  $("#auth-description").textContent = isRecovery
+    ? "Defina sua nova senha para concluir a recuperacao da conta."
+    : isSignup
     ? "Crie sua conta com e-mail e senha para sincronizar seus dados entre dispositivos."
     : "Entre com seu e-mail e senha para acessar seus lançamentos em qualquer dispositivo.";
+}
+
+  $("#auth-form").hidden = isRecovery;
+  $(".auth-switcher").hidden = isRecovery;
+  $("#auth-reset-button").hidden = isRecovery;
+  $("#demo-mode-button").hidden = isRecovery;
+  $("#auth-recovery-form").hidden = !isRecovery;
+  $("#auth-recovery-cancel").hidden = !isRecovery;
 }
 
 function bindAuthPasswordMode() {
   $("#auth-mode-signin").addEventListener("click", () => {
     state.authMode = "signin";
+    state.authScreen = "login";
     renderAuthMode();
     $("#auth-feedback").hidden = true;
   });
 
   $("#auth-mode-signup").addEventListener("click", () => {
     state.authMode = "signup";
+    state.authScreen = "login";
     renderAuthMode();
     $("#auth-feedback").hidden = true;
+  });
+
+  $("#sign-out-button").addEventListener("click", async () => {
+    if (state.serviceMode === "demo") {
+      state.authScreen = "login";
+      clearAuthUrlState();
+      showAuth({ showSetup: !state.isConfigured });
+      renderAuthMode();
+      return;
+    }
+    if (!supabaseClient) return;
+    await supabaseClient.auth.signOut();
   });
 
   $("#auth-form").addEventListener("submit", async (event) => {
@@ -1672,6 +1723,54 @@ function bindAuthPasswordMode() {
     }
   });
 
+  $("#auth-recovery-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const password = $("#auth-recovery-password").value;
+    const confirm = $("#auth-recovery-confirm").value;
+    if (!password || !confirm) {
+      enterRecoveryMode("Preencha e confirme a nova senha.");
+      return;
+    }
+    if (password !== confirm) {
+      enterRecoveryMode("As senhas nao conferem. Revise os dois campos.");
+      return;
+    }
+    if (!supabaseClient) {
+      leaveRecoveryMode("O Supabase nao esta configurado corretamente para concluir a redefinicao.");
+      return;
+    }
+
+    $("#auth-recovery-submit").disabled = true;
+    try {
+      const { error } = await supabaseClient.auth.updateUser({ password });
+      if (error) throw error;
+      state.pendingAuthMessage = "Senha atualizada com sucesso. Entre com sua nova senha.";
+      state.authMode = "signin";
+      state.authScreen = "login";
+      clearAuthUrlState();
+      await supabaseClient.auth.signOut();
+      $("#auth-password").value = "";
+    } catch (error) {
+      let message = error.message || "Nao foi possivel atualizar sua senha.";
+      if (String(message).toLowerCase().includes("password")) {
+        message = "A nova senha nao atende aos criterios exigidos. Tente uma senha mais forte.";
+      }
+      enterRecoveryMode(message);
+    } finally {
+      $("#auth-recovery-submit").disabled = false;
+    }
+  });
+
+  $("#auth-recovery-cancel").addEventListener("click", async () => {
+    state.authMode = "signin";
+    if (supabaseClient && state.session) {
+      clearAuthUrlState();
+      await supabaseClient.auth.signOut();
+      return;
+    }
+    leaveRecoveryMode();
+  });
+
   renderAuthMode();
 }
 
@@ -1691,15 +1790,29 @@ async function bootstrap() {
   }
 
   if (!authListenerBound) {
-    supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      const recoveryRoute = authRouteParams().get("type") === "recovery";
+      if (event === "PASSWORD_RECOVERY" || recoveryRoute) {
+        state.session = session;
+        state.currentUser = session?.user || null;
+        state.isAuthenticated = Boolean(session?.user);
+        state.serviceMode = "remote";
+        setSyncState("idle", "Atualize sua senha para concluir a recuperacao.");
+        enterRecoveryMode("Defina sua nova senha para concluir a recuperacao da conta.");
+        return;
+      }
       if (session?.user) {
         await bootAuthenticatedApp(session);
       } else {
         state.isAuthenticated = false;
         state.session = null;
         state.currentUser = null;
+        state.authScreen = "login";
         setSyncState("idle", "Aguardando autenticação.");
-        showAuth({ showSetup: false, message: parseAuthFeedbackFromUrl() });
+        const message = state.pendingAuthMessage || parseAuthFeedbackFromUrl();
+        state.pendingAuthMessage = "";
+        showAuth({ showSetup: false, message });
+        renderAuthMode();
       }
     });
     authListenerBound = true;
@@ -1708,6 +1821,14 @@ async function bootstrap() {
   const { data, error } = await supabaseClient.auth.getSession();
   if (error) {
     showAuth({ message: error.message });
+    return;
+  }
+
+  if (authRouteParams().get("type") === "recovery" && data.session?.user) {
+    state.session = data.session;
+    state.currentUser = data.session.user;
+    state.isAuthenticated = true;
+    enterRecoveryMode("Defina sua nova senha para concluir a recuperacao da conta.");
     return;
   }
 

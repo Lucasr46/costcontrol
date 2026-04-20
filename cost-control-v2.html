@@ -57,7 +57,20 @@
           <button class="button button--primary" id="auth-submit-button" type="submit">Entrar</button>
         </form>
 
+        <form id="auth-recovery-form" class="form" hidden>
+          <label class="field">
+            <span>Nova senha</span>
+            <input id="auth-recovery-password" type="password" placeholder="Digite sua nova senha" />
+          </label>
+          <label class="field">
+            <span>Confirmar nova senha</span>
+            <input id="auth-recovery-confirm" type="password" placeholder="Repita sua nova senha" />
+          </label>
+          <button class="button button--primary" id="auth-recovery-submit" type="submit">Salvar nova senha</button>
+        </form>
+
         <button class="auth-link" id="auth-reset-button" type="button">Esqueci minha senha</button>
+        <button class="auth-link" id="auth-recovery-cancel" type="button" hidden>Voltar para o login</button>
 
         <div class="auth-card__actions">
           <button class="button button--ghost" id="demo-mode-button" type="button">Usar modo demonstração local</button>
