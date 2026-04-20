@@ -59,13 +59,6 @@ code {
   box-shadow: var(--shadow);
 }
 
-.screen-state__actions {
-  margin-top: 20px;
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
 
 .auth-card__text {
   color: var(--muted);
