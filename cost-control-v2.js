@@ -68,6 +68,7 @@ let supabaseClient = null;
 let authListenerBound = false;
 let isRendering = false;
 let authBootPromise = null;
+let loadingGuardTimer = null;
 
 function money(value) {
   return fmtCurrency.format(Number(value || 0));
@@ -285,9 +286,20 @@ function showLoading(message) {
   $("#app-loading").hidden = false;
   $("#auth-shell").hidden = true;
   $("#app-shell").hidden = true;
+  $("#loading-actions").hidden = true;
+  if (loadingGuardTimer) window.clearTimeout(loadingGuardTimer);
+  loadingGuardTimer = window.setTimeout(() => {
+    if ($("#app-loading").hidden) return;
+    $("#loading-message").textContent = "A restauracao da sessao esta demorando mais do que o esperado.";
+    $("#loading-actions").hidden = false;
+  }, 12000);
 }
 
 function showAuth(options = {}) {
+  if (loadingGuardTimer) {
+    window.clearTimeout(loadingGuardTimer);
+    loadingGuardTimer = null;
+  }
   $("#app-loading").hidden = true;
   $("#app-shell").hidden = true;
   $("#auth-shell").hidden = false;
@@ -320,6 +332,10 @@ function leaveRecoveryMode(message = "") {
 }
 
 function showApp() {
+  if (loadingGuardTimer) {
+    window.clearTimeout(loadingGuardTimer);
+    loadingGuardTimer = null;
+  }
   $("#app-loading").hidden = true;
   $("#auth-shell").hidden = true;
   $("#app-shell").hidden = false;
@@ -1035,6 +1051,43 @@ function bindPeriodFilter() {
   });
 }
 
+function bindLoadingActions() {
+  $("#loading-retry-button").addEventListener("click", () => {
+    retrySessionRestore().catch((error) => {
+      console.error(error);
+    });
+  });
+
+  $("#loading-login-button").addEventListener("click", async () => {
+    authBootPromise = null;
+    if (supabaseClient) {
+      try {
+        await supabaseClient.auth.signOut();
+      } catch (error) {
+        console.error(error);
+      }
+    }
+    showAuth({ showSetup: !state.isConfigured, message: "Entre novamente para continuar." });
+    renderAuthMode();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && !$("#app-loading").hidden) {
+      retrySessionRestore().catch((error) => {
+        console.error(error);
+      });
+    }
+  });
+
+  window.addEventListener("pageshow", () => {
+    if (!$("#app-loading").hidden) {
+      retrySessionRestore().catch((error) => {
+        console.error(error);
+      });
+    }
+  });
+}
+
 function bindAuth() {
   $("#auth-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1588,6 +1641,30 @@ async function safeBootAuthenticatedApp(session) {
   return authBootPromise;
 }
 
+async function retrySessionRestore() {
+  if (!supabaseClient) {
+    showAuth({ showSetup: true, message: "Configure o Supabase antes de tentar restaurar a sessao." });
+    renderAuthMode();
+    return;
+  }
+
+  showLoading("Tentando restaurar sua sessao...");
+  try {
+    const { data, error } = await withTimeout(supabaseClient.auth.getSession(), 15000, "A leitura da sua sessao");
+    if (error) throw error;
+    if (data.session?.user) {
+      await safeBootAuthenticatedApp(data.session);
+      return;
+    }
+    showAuth({ showSetup: false, message: "Sua sessao expirou. Entre novamente para continuar." });
+    renderAuthMode();
+  } catch (error) {
+    console.error(error);
+    showAuth({ showSetup: false, message: "Nao foi possivel restaurar sua sessao agora. Entre novamente para continuar." });
+    renderAuthMode();
+  }
+}
+
 function bindAuthProduction() {
   $("#auth-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1822,6 +1899,7 @@ function bindAuthPasswordMode() {
 async function bootstrap() {
   bindNav();
   bindPeriodFilter();
+  bindLoadingActions();
   bindAuthPasswordMode();
   bindForms();
   resetTransactionForm();
@@ -1883,6 +1961,7 @@ async function bootstrap() {
   }
 
   showAuth({ showSetup: false, message: parseAuthFeedbackFromUrl() });
+  renderAuthMode();
 }
 
 bootstrap().catch((error) => {
