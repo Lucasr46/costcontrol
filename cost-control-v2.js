@@ -1608,8 +1608,6 @@ function renderAuthMode() {
     : isSignup
     ? "Crie sua conta com e-mail e senha para sincronizar seus dados entre dispositivos."
     : "Entre com seu e-mail e senha para acessar seus lançamentos em qualquer dispositivo.";
-}
-
   $("#auth-form").hidden = isRecovery;
   $(".auth-switcher").hidden = isRecovery;
   $("#auth-reset-button").hidden = isRecovery;
