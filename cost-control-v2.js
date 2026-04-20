@@ -67,6 +67,7 @@ const state = {
 let supabaseClient = null;
 let authListenerBound = false;
 let isRendering = false;
+let authBootPromise = null;
 
 function money(value) {
   return fmtCurrency.format(Number(value || 0));
@@ -264,6 +265,18 @@ function createSupabaseClient() {
       autoRefreshToken: true,
       detectSessionInUrl: true,
     },
+  });
+}
+
+function withTimeout(promise, ms, label) {
+  let timer = null;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = window.setTimeout(() => {
+      reject(new Error(`${label} demorou mais do que o esperado.`));
+    }, ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer) window.clearTimeout(timer);
   });
 }
 
@@ -1520,11 +1533,11 @@ async function bootAuthenticatedApp(session) {
   state.isAuthenticated = true;
   setSyncState("loading", "Carregando seus dados...");
   showLoading("Carregando seus dados...");
-  await ensureProfile();
-  let remoteState = await fetchRemoteState();
-  await seedDefaultsIfNeeded(remoteState.categories);
-  remoteState = await fetchRemoteState();
-  remoteState = await migrateLegacyLocalStateIfNeeded(remoteState);
+  await withTimeout(ensureProfile(), 15000, "A preparação da sua conta");
+  let remoteState = await withTimeout(fetchRemoteState(), 15000, "O carregamento dos seus dados");
+  await withTimeout(seedDefaultsIfNeeded(remoteState.categories), 15000, "A configuração das categorias padrão");
+  remoteState = await withTimeout(fetchRemoteState(), 15000, "A atualização dos seus dados");
+  remoteState = await withTimeout(migrateLegacyLocalStateIfNeeded(remoteState), 15000, "A migração dos seus dados locais");
 
   state.selectedMonth = remoteState.preferences?.selected_month || remoteState.transactions[0]?.competence || CURRENT_MONTH;
   state.dashboardCategoryId = remoteState.preferences?.dashboard_category_id || "";
@@ -1539,6 +1552,40 @@ async function bootAuthenticatedApp(session) {
   resetCategoryForm();
   setSyncState("synced", "Tudo sincronizado com sua conta.");
   renderAll();
+}
+
+async function recoverFromBootError(error) {
+  console.error(error);
+  authBootPromise = null;
+  state.isAuthenticated = false;
+  state.session = null;
+  state.currentUser = null;
+  state.authScreen = "login";
+  setSyncState("error", "Nao foi possivel restaurar sua sessao automaticamente.");
+  if (supabaseClient) {
+    try {
+      await supabaseClient.auth.signOut();
+    } catch (signOutError) {
+      console.error(signOutError);
+    }
+  }
+  showAuth({
+    showSetup: false,
+    message: "Nao conseguimos restaurar sua sessao automaticamente. Entre novamente para continuar.",
+  });
+  renderAuthMode();
+}
+
+async function safeBootAuthenticatedApp(session) {
+  if (authBootPromise) return authBootPromise;
+  authBootPromise = bootAuthenticatedApp(session)
+    .catch(async (error) => {
+      await recoverFromBootError(error);
+    })
+    .finally(() => {
+      authBootPromise = null;
+    });
+  return authBootPromise;
 }
 
 function bindAuthProduction() {
@@ -1800,7 +1847,7 @@ async function bootstrap() {
         return;
       }
       if (session?.user) {
-        await bootAuthenticatedApp(session);
+        await safeBootAuthenticatedApp(session);
       } else {
         state.isAuthenticated = false;
         state.session = null;
@@ -1831,7 +1878,7 @@ async function bootstrap() {
   }
 
   if (data.session?.user) {
-    await bootAuthenticatedApp(data.session);
+    await safeBootAuthenticatedApp(data.session);
     return;
   }
 
