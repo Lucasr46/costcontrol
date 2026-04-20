@@ -1846,6 +1846,16 @@ async function bootstrap() {
         enterRecoveryMode("Defina sua nova senha para concluir a recuperacao da conta.");
         return;
       }
+      const sameUserSession =
+        session?.user &&
+        state.currentUser?.id === session.user.id &&
+        state.isAuthenticated;
+      if (sameUserSession && (event === "TOKEN_REFRESHED" || event === "SIGNED_IN")) {
+        state.session = session;
+        state.currentUser = session.user;
+        setSyncState("synced", "Tudo sincronizado com sua conta.");
+        return;
+      }
       if (session?.user) {
         await safeBootAuthenticatedApp(session);
       } else {
