@@ -24,6 +24,7 @@ body {
   background:
     radial-gradient(circle at top right, rgba(31, 94, 255, 0.1), transparent 28%),
     linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  overflow-x: hidden;
 }
 
 button,
@@ -700,14 +701,60 @@ select {
   }
 
   .sidebar {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(240px, 1fr);
+    align-items: start;
     border-right: 0;
     border-bottom: 1px solid var(--border);
+  }
+
+  .brand,
+  .session-panel,
+  .nav,
+  .sidebar-panel {
+    margin: 0;
+  }
+
+  .nav {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(6, minmax(120px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .nav__item {
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .sidebar-panel {
+    grid-column: 1 / -1;
+    margin-top: 0;
   }
 }
 
 @media (max-width: 960px) {
   .main {
     padding: 20px;
+  }
+
+  .screen-state {
+    padding: 18px;
+  }
+
+  .screen-state__card {
+    padding: 24px;
+    border-radius: 24px;
+  }
+
+  .sidebar {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding: 20px;
+  }
+
+  .brand {
+    align-items: center;
   }
 
   .topbar,
@@ -726,7 +773,11 @@ select {
   }
 
   .month-strip {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(62px, 1fr);
+    overflow-x: auto;
+    padding-bottom: 4px;
   }
 
   .topbar__actions > .button,
@@ -763,5 +814,127 @@ select {
 
   .trend__bar-wrap {
     height: 110px;
+  }
+
+  .category-hover-card {
+    position: static;
+    width: 100%;
+    margin-top: 16px;
+  }
+}
+
+@media (max-width: 720px) {
+  .main {
+    padding: 16px;
+  }
+
+  .topbar {
+    margin-bottom: 18px;
+  }
+
+  .card {
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  .card__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sidebar {
+    padding: 16px;
+  }
+
+  .nav {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(118px, 1fr);
+    gap: 10px;
+  }
+
+  .sidebar-panel {
+    display: none;
+  }
+
+  .button--iconic {
+    justify-content: center;
+  }
+
+  .bar-row {
+    gap: 8px;
+  }
+
+  .trend {
+    min-height: 220px;
+  }
+
+  .trend__chart {
+    min-height: 200px;
+    gap: 18px;
+  }
+
+  .trend__bar {
+    width: 54px;
+    border-radius: 16px;
+  }
+
+  .table-head {
+    display: none;
+  }
+
+  .table-row,
+  .table-row--actions {
+    gap: 10px;
+    padding: 16px 0;
+  }
+
+  .table-row span,
+  .table-row--actions span {
+    display: block;
+  }
+}
+
+@media (max-width: 480px) {
+  .screen-state {
+    padding: 12px;
+  }
+
+  .screen-state__card {
+    padding: 20px;
+    border-radius: 20px;
+  }
+
+  .brand {
+    align-items: flex-start;
+  }
+
+  .brand h1 {
+    font-size: 2.1rem;
+    line-height: 1.05;
+  }
+
+  .topbar h2 {
+    font-size: 1.95rem;
+  }
+
+  .month-strip {
+    grid-auto-columns: minmax(58px, 1fr);
+  }
+
+  .year-picker__button,
+  .month-pill {
+    height: 42px;
+    border-radius: 14px;
+  }
+
+  .stat strong,
+  .summary strong,
+  .mini-card strong {
+    font-size: 1.35rem;
+  }
+
+  .button {
+    padding: 13px 16px;
   }
 }
