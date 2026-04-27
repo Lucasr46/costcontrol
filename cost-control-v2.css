@@ -418,6 +418,7 @@ select {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  white-space: nowrap;
 }
 
 .button__icon {
@@ -681,7 +682,21 @@ select {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.button--icononly {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .empty-state {

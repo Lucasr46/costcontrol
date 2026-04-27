@@ -739,8 +739,8 @@ function renderTransactions() {
           money(item.amount),
         ],
         `
-          <button class="button button--ghost button--sm" data-edit-transaction="${item.id}" type="button">Editar</button>
-          <button class="button button--danger button--sm" data-delete-transaction="${item.id}" type="button">Excluir</button>
+          <button class="button button--ghost button--icononly" data-edit-transaction="${item.id}" type="button" aria-label="Editar lançamento" title="Editar lançamento">✏</button>
+          <button class="button button--danger button--icononly" data-delete-transaction="${item.id}" type="button" aria-label="Excluir lançamento" title="Excluir lançamento">🗑</button>
         `
       )
     );
@@ -901,8 +901,8 @@ function renderHistory() {
           money(item.amount),
         ],
         `
-          <button class="button button--ghost button--sm" data-edit-transaction="${item.id}" type="button">Editar</button>
-          <button class="button button--danger button--sm" data-delete-transaction="${item.id}" type="button">Excluir</button>
+          <button class="button button--ghost button--icononly" data-edit-transaction="${item.id}" type="button" aria-label="Editar lançamento" title="Editar lançamento">✏</button>
+          <button class="button button--danger button--icononly" data-delete-transaction="${item.id}" type="button" aria-label="Excluir lançamento" title="Excluir lançamento">🗑</button>
         `
       )
     );
