@@ -104,8 +104,12 @@ code {
   justify-self: start;
 }
 
-.auth-card__actions {
-  margin-top: 14px;
+.auth-card .form {
+  gap: 16px;
+}
+
+.auth-card .form .button {
+  margin-top: 6px;
 }
 
 .auth-feedback,

@@ -1061,18 +1061,6 @@ function bindAuth() {
     }
   });
 
-  $("#demo-mode-button").addEventListener("click", () => {
-    state.serviceMode = "demo";
-    state.isAuthenticated = false;
-    state.session = null;
-    state.currentUser = null;
-    applySnapshot(cacheSnapshot() || legacySnapshot(), true);
-    showApp();
-    resetTransactionForm();
-    resetCategoryForm();
-    renderAll();
-  });
-
   $("#sign-out-button").addEventListener("click", async () => {
     if (state.serviceMode === "demo") {
       showAuth({ showSetup: !state.isConfigured });
@@ -1619,29 +1607,7 @@ function bindAuthProduction() {
     }
   });
 
-  $("#demo-mode-button").addEventListener("click", () => {
-    state.serviceMode = "demo";
-    state.isAuthenticated = false;
-    state.session = null;
-    state.currentUser = null;
-    setSyncState("idle", "Dados somente neste navegador.");
-    applySnapshot(cacheSnapshot() || legacySnapshot(), true);
-    clearAuthUrlState();
-    showApp();
-    resetTransactionForm();
-    resetCategoryForm();
-    renderAll();
-  });
-
-  $("#sign-out-button").addEventListener("click", async () => {
-    if (state.serviceMode === "demo") {
-      clearAuthUrlState();
-      showAuth({ showSetup: !state.isConfigured });
-      return;
-    }
-    if (!supabaseClient) return;
-    await supabaseClient.auth.signOut();
-  });
+  // Fluxo antigo de demonstração removido.
 }
 
 function renderAuthMode() {
@@ -1658,7 +1624,6 @@ function renderAuthMode() {
   $("#auth-form").hidden = isRecovery;
   $(".auth-switcher").hidden = isRecovery;
   $("#auth-reset-button").hidden = isRecovery;
-  $("#demo-mode-button").hidden = isRecovery;
   $("#auth-recovery-form").hidden = !isRecovery;
   $("#auth-recovery-cancel").hidden = !isRecovery;
 }
@@ -1679,13 +1644,6 @@ function bindAuthPasswordMode() {
   });
 
   $("#sign-out-button").addEventListener("click", async () => {
-    if (state.serviceMode === "demo") {
-      state.authScreen = "login";
-      clearAuthUrlState();
-      showAuth({ showSetup: !state.isConfigured });
-      renderAuthMode();
-      return;
-    }
     if (!supabaseClient) return;
     await supabaseClient.auth.signOut();
   });
