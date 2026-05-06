@@ -205,6 +205,24 @@ function saveLocalCache() {
   window.localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(buildSnapshot()));
 }
 
+function hydrateCachedSessionView(session) {
+  const snapshot = cacheSnapshot() || legacySnapshot();
+  if (!snapshot) return false;
+
+  state.serviceMode = "remote";
+  state.session = session;
+  state.currentUser = session.user;
+  state.isAuthenticated = true;
+  applySnapshot(snapshot, false);
+  ensureSelectedMonth();
+  resetTransactionForm();
+  resetCategoryForm();
+  showApp();
+  setSyncState("loading", "Atualizando seus dados...");
+  renderAll();
+  return true;
+}
+
 function clearAuthUrlState() {
   const cleanUrl = `${window.location.origin}${window.location.pathname}`;
   window.history.replaceState({}, document.title, cleanUrl);
@@ -1440,41 +1458,6 @@ async function upsertPreferencesRemote(payload) {
   if (error) throw error;
 }
 
-async function persistPreferences() {
-  saveLocalCache();
-  if (!hasRemote()) return;
-  await upsertPreferencesRemote({
-    selected_month: state.selectedMonth,
-    filters: state.filters,
-    dashboard_category_id: state.dashboardCategoryId || null,
-  });
-}
-
-async function bootAuthenticatedApp(session) {
-  state.serviceMode = "remote";
-  state.session = session;
-  state.currentUser = session.user;
-  state.isAuthenticated = true;
-  showLoading("Carregando seus dados...");
-  await ensureProfile();
-  let remoteState = await fetchRemoteState();
-  await seedDefaultsIfNeeded(remoteState.categories);
-  remoteState = await fetchRemoteState();
-  remoteState = await migrateLegacyLocalStateIfNeeded(remoteState);
-
-  state.selectedMonth = remoteState.preferences?.selected_month || remoteState.transactions[0]?.competence || CURRENT_MONTH;
-  state.dashboardCategoryId = remoteState.preferences?.dashboard_category_id || "";
-  state.filters = remoteState.preferences?.filters || state.filters;
-  state.planning = Object.keys(remoteState.planning).length ? remoteState.planning : structuredClone(EMPTY_PLANNING);
-  state.categories = remoteState.categories.length ? remoteState.categories : structuredClone(DEFAULT_CATEGORIES);
-  state.transactions = remoteState.transactions;
-
-  showApp();
-  resetTransactionForm();
-  resetCategoryForm();
-  renderAll();
-}
-
 function updateSessionPanel() {
   const email = state.currentUser?.email || (state.serviceMode === "demo" ? "Modo demonstração local" : "Sem sessão");
   $("#user-email").textContent = email;
@@ -1519,8 +1502,9 @@ async function bootAuthenticatedApp(session) {
   state.session = session;
   state.currentUser = session.user;
   state.isAuthenticated = true;
-  setSyncState("loading", "Carregando seus dados...");
-  showLoading("Carregando seus dados...");
+  const hasVisibleApp = !$("#app-shell").hidden;
+  setSyncState("loading", hasVisibleApp ? "Atualizando seus dados..." : "Carregando seus dados...");
+  if (!hasVisibleApp) showLoading("Carregando seus dados...");
   await withTimeout(ensureProfile(), 15000, "A preparação da sua conta");
   let remoteState = await withTimeout(fetchRemoteState(), 15000, "O carregamento dos seus dados");
   await withTimeout(seedDefaultsIfNeeded(remoteState.categories), 15000, "A configuração das categorias padrão");
@@ -1545,18 +1529,16 @@ async function bootAuthenticatedApp(session) {
 async function recoverFromBootError(error) {
   console.error(error);
   authBootPromise = null;
+  const hasVisibleApp = !$("#app-shell").hidden;
+  setSyncState("error", hasVisibleApp ? "Nao foi possivel atualizar seus dados agora." : "Nao foi possivel restaurar sua sessao automaticamente.");
+  if (hasVisibleApp) {
+    renderAll();
+    return;
+  }
   state.isAuthenticated = false;
   state.session = null;
   state.currentUser = null;
   state.authScreen = "login";
-  setSyncState("error", "Nao foi possivel restaurar sua sessao automaticamente.");
-  if (supabaseClient) {
-    try {
-      await supabaseClient.auth.signOut();
-    } catch (signOutError) {
-      console.error(signOutError);
-    }
-  }
   showAuth({
     showSetup: false,
     message: "Nao conseguimos restaurar sua sessao automaticamente. Entre novamente para continuar.",
@@ -1815,6 +1797,7 @@ async function bootstrap() {
         return;
       }
       if (session?.user) {
+        hydrateCachedSessionView(session);
         await safeBootAuthenticatedApp(session);
       } else {
         state.isAuthenticated = false;
@@ -1846,6 +1829,7 @@ async function bootstrap() {
   }
 
   if (data.session?.user) {
+    hydrateCachedSessionView(data.session);
     await safeBootAuthenticatedApp(data.session);
     return;
   }
