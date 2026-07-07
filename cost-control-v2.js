@@ -36,7 +36,6 @@ const views = {
   planning: ["Planejamento", "Distribuição da renda mensal"],
   launches: ["Lançamentos", "Receitas, despesas e investimentos"],
   categories: ["Categorias", "Gestão modular"],
-  reports: ["Relatórios", "Análise por categoria"],
   history: ["Histórico", "Rastreabilidade das movimentações"],
 };
 
@@ -56,7 +55,6 @@ const state = {
   editingCategoryId: null,
   dashboardCategoryId: "",
   filters: {
-    reports: { dateRange: "selected_month", type: "all", categoryId: "all" },
     history: { dateRange: "selected_month", type: "all", categoryId: "all" },
   },
   planning: structuredClone(EMPTY_PLANNING),
@@ -174,7 +172,6 @@ function applySnapshot(snapshot, fallbackToDemo = false) {
   state.selectedMonth = snapshot?.selectedMonth || CURRENT_MONTH;
   state.dashboardCategoryId = snapshot?.dashboardCategoryId || "";
   state.filters = snapshot?.filters || {
-    reports: { dateRange: "selected_month", type: "all", categoryId: "all" },
     history: { dateRange: "selected_month", type: "all", categoryId: "all" },
   };
   state.planning = snapshot?.planning && Object.keys(snapshot.planning).length
@@ -442,13 +439,6 @@ function monthsForDateRange(dateRange, baseMonth = state.selectedMonth) {
   return [baseMonth];
 }
 
-function dateRangeLabel(dateRange, baseMonth = state.selectedMonth) {
-  if (dateRange === "selected_month") return `Mês selecionado: ${monthLabel(baseMonth)}`;
-  if (dateRange === "last_3_months") return `Janela: últimos 3 meses até ${monthLabel(baseMonth)}`;
-  if (dateRange === "last_6_months") return `Janela: últimos 6 meses até ${monthLabel(baseMonth)}`;
-  if (dateRange === "current_year") return `Ano atual: ${baseMonth.slice(0, 4)}`;
-  return "Todos os períodos";
-}
 
 function transactionsByFilter(filter) {
   const allowedMonths = monthsForDateRange(filter.dateRange);
@@ -458,18 +448,6 @@ function transactionsByFilter(filter) {
   return items;
 }
 
-function comparisonByMonth(filter) {
-  const explicitMonths = monthsForDateRange(filter.dateRange) || dashboardTrendMonths(6);
-  return explicitMonths.map((month) => {
-    const items = transactionsByFilter({ ...filter, dateRange: "all" }).filter((item) => item.competence === month);
-    return {
-      month,
-      label: monthLabel(month),
-      total: items.reduce((sum, item) => sum + item.amount, 0),
-      count: items.length,
-    };
-  });
-}
 
 function percentDelta(currentValue, previousValue) {
   if (!previousValue) return currentValue ? 100 : 0;
@@ -515,24 +493,28 @@ function rowWithActions(columns, actions) {
 function renderPeriodFilter() {
   const selectedYear = state.selectedMonth.slice(0, 4);
   const selectedMonthNumber = state.selectedMonth.slice(5, 7);
-  const monthStrip = $("#month-strip");
   const yearButton = $("#period-year-button");
   const yearMenu = $("#period-year-menu");
+  const monthButton = $("#period-month-button");
+  const monthMenu = $("#period-month-menu");
 
   yearButton.textContent = selectedYear;
   yearMenu.innerHTML = availableYears()
     .map((year) => `<button type="button" class="year-picker__option ${year === selectedYear ? "year-picker__option--active" : ""}" data-year-option="${year}">${year}</button>`)
     .join("");
 
-  monthStrip.innerHTML = MONTH_LABELS.map((label, index) => {
+  monthButton.textContent = shortMonthLabel(state.selectedMonth);
+  monthMenu.innerHTML = MONTH_LABELS.map((label, index) => {
     const monthValue = String(index + 1).padStart(2, "0");
     const key = `${selectedYear}-${monthValue}`;
-    return `<button type="button" class="month-pill ${monthValue === selectedMonthNumber ? "month-pill--active" : ""}" data-month-pill="${key}">${label}</button>`;
+    return `<button type="button" class="year-picker__option ${monthValue === selectedMonthNumber ? "year-picker__option--active" : ""}" data-month-option="${key}">${label}</button>`;
   }).join("");
 
-  $$("[data-month-pill]").forEach((button) => {
+  $$("[data-month-option]").forEach((button) => {
     button.onclick = () => {
-      state.selectedMonth = button.dataset.monthPill;
+      state.selectedMonth = button.dataset.monthOption;
+      monthMenu.hidden = true;
+      monthButton.setAttribute("aria-expanded", "false");
       state.dashboardCategoryId = "";
       $("#tx-date").value = defaultTransactionDate(state.selectedMonth);
       renderAll();
@@ -809,93 +791,22 @@ function renderCategories() {
   });
 }
 
-function groupedTransactionsByCategory(filter) {
-  const grouped = {};
-  transactionsByFilter(filter).forEach((item) => {
-    const cat = category(item.categoryId);
-    const name = cat ? cat.name : "Sem categoria";
-    grouped[name] = {
-      name,
-      type: item.type === "expense" ? item.typeCost : item.type,
-      amount: (grouped[name]?.amount || 0) + item.amount,
-    };
-  });
-  return Object.values(grouped).sort((a, b) => b.amount - a.amount);
-}
 
 function syncFilterOptions() {
-  const reportType = state.filters.reports.type;
   const historyType = state.filters.history.type;
-  const reportCategory = $("#report-category");
   const historyCategory = $("#history-category");
-  const reportCategories = state.categories.filter((item) => reportType === "all" || item.group === reportType);
   const historyCategories = state.categories.filter((item) => historyType === "all" || item.group === historyType);
 
-  reportCategory.innerHTML = ['<option value="all">Todas</option>'].concat(reportCategories.map((item) => `<option value="${item.id}">${item.name}</option>`)).join("");
-  historyCategory.innerHTML = ['<option value="all">Todas</option>'].concat(historyCategories.map((item) => `<option value="${item.id}">${item.name}</option>`)).join("");
-  reportCategory.value = reportCategories.some((item) => item.id === state.filters.reports.categoryId) ? state.filters.reports.categoryId : "all";
-  historyCategory.value = historyCategories.some((item) => item.id === state.filters.history.categoryId) ? state.filters.history.categoryId : "all";
-  $("#report-date-range").value = state.filters.reports.dateRange;
-  $("#report-type").value = state.filters.reports.type;
+  historyCategory.innerHTML = ['<option value="all">Todas</option>']
+    .concat(historyCategories.map((item) => `<option value="${item.id}">${item.name}</option>`))
+    .join("");
+  historyCategory.value = historyCategories.some((item) => item.id === state.filters.history.categoryId)
+    ? state.filters.history.categoryId
+    : "all";
   $("#history-date-range").value = state.filters.history.dateRange;
   $("#history-type").value = state.filters.history.type;
 }
 
-function renderReports() {
-  syncFilterOptions();
-  const filter = state.filters.reports;
-  const items = transactionsByFilter(filter);
-  const grouped = groupedTransactionsByCategory(filter);
-  const total = items.reduce((sum, item) => sum + item.amount, 0);
-  const topCategory = grouped[0];
-  const average = items.length ? total / items.length : 0;
-
-  $("#report-summary-cards").innerHTML = `
-    <article class="card mini-card">
-      <span>Total filtrado</span>
-      <strong>${money(total)}</strong>
-      <small>${dateRangeLabel(filter.dateRange)}</small>
-    </article>
-    <article class="card mini-card">
-      <span>Categoria destaque</span>
-      <strong>${topCategory?.name || "Sem dados"}</strong>
-      <small>${topCategory ? money(topCategory.amount) : "Nenhuma movimentação"}</small>
-    </article>
-    <article class="card mini-card">
-      <span>Ticket médio</span>
-      <strong>${money(average)}</strong>
-      <small>${items.length} movimentação(ões)</small>
-    </article>
-  `;
-
-  $("#report-comparison-list").innerHTML = comparisonByMonth(filter)
-    .map((item) => `
-      <div class="table-row">
-        <span>${item.label}</span>
-        <span>${item.count} lançamento(s)</span>
-        <span>${money(item.total)}</span>
-      </div>
-    `)
-    .join("");
-
-  const container = $("#report-table");
-  container.innerHTML = "";
-  if (!grouped.length) {
-    container.append(row(["Nenhuma categoria encontrada.", "-", "-", "-"]));
-    return;
-  }
-
-  grouped.forEach((item) => {
-    container.append(
-      row([
-        item.name,
-        typeLabel(item.type),
-        total ? `${Math.round((item.amount / total) * 100)}%` : "0%",
-        money(item.amount),
-      ])
-    );
-  });
-}
 
 function renderHistory() {
   syncFilterOptions();
@@ -938,7 +849,6 @@ function renderAll() {
   renderCategorySelects();
   renderTransactions();
   renderCategories();
-  renderReports();
   renderHistory();
   updateSessionPanel();
   saveLocalCache();
@@ -1024,13 +934,16 @@ function bindTransactionActions() {
 
 function activateView(name) {
   $$(".nav__item").forEach((item) => item.classList.toggle("nav__item--active", item.dataset.view === name));
+  $$(".bottom-nav__item").forEach((item) =>
+    item.classList.toggle("bottom-nav__item--active", item.dataset.view === name)
+  );
   $$(".view").forEach((view) => view.classList.toggle("view--active", view.dataset.panel === name));
   $("#view-title").textContent = views[name][0];
   $("#view-eyebrow").textContent = views[name][1];
 }
 
 function bindNav() {
-  $$(".nav__item").forEach((item) => {
+  $$("[data-view]").forEach((item) => {
     item.addEventListener("click", () => activateView(item.dataset.view));
   });
   $("#go-launches").addEventListener("click", () => activateView("launches"));
@@ -1039,16 +952,32 @@ function bindNav() {
 function bindPeriodFilter() {
   const yearButton = $("#period-year-button");
   const yearMenu = $("#period-year-menu");
+  const monthButton = $("#period-month-button");
+  const monthMenu = $("#period-month-menu");
   yearButton.onclick = (event) => {
     event.stopPropagation();
     const willOpen = yearMenu.hidden;
     yearMenu.hidden = !willOpen;
+    monthMenu.hidden = true;
+    monthButton.setAttribute("aria-expanded", "false");
     yearButton.setAttribute("aria-expanded", String(willOpen));
+  };
+  monthButton.onclick = (event) => {
+    event.stopPropagation();
+    const willOpen = monthMenu.hidden;
+    monthMenu.hidden = !willOpen;
+    yearMenu.hidden = true;
+    yearButton.setAttribute("aria-expanded", "false");
+    monthButton.setAttribute("aria-expanded", String(willOpen));
   };
   document.addEventListener("click", (event) => {
     if (!event.target.closest(".year-picker")) {
       yearMenu.hidden = true;
       yearButton.setAttribute("aria-expanded", "false");
+    }
+    if (!event.target.closest(".month-picker")) {
+      monthMenu.hidden = true;
+      monthButton.setAttribute("aria-expanded", "false");
     }
   });
 }
@@ -1115,19 +1044,7 @@ function bindForms() {
   $("#tx-cancel-button").addEventListener("click", resetTransactionForm);
   $("#category-group").addEventListener("change", syncCategoryFormState);
   $("#category-cancel-button").addEventListener("click", resetCategoryForm);
-  $("#report-date-range").addEventListener("change", (event) => {
-    state.filters.reports.dateRange = event.target.value;
-    renderAll();
-  });
-  $("#report-type").addEventListener("change", (event) => {
-    state.filters.reports.type = event.target.value;
-    state.filters.reports.categoryId = "all";
-    renderAll();
-  });
-  $("#report-category").addEventListener("change", (event) => {
-    state.filters.reports.categoryId = event.target.value;
-    renderAll();
-  });
+
   $("#history-date-range").addEventListener("change", (event) => {
     state.filters.history.dateRange = event.target.value;
     renderAll();
